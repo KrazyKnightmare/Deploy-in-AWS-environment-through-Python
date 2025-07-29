@@ -1,0 +1,161 @@
+import boto3
+import time
+
+# Initialize boto3 clients
+cloudformation = boto3.client('cloudformation')
+s3 = boto3.client('s3')
+codepipeline = boto3.client('codepipeline')
+codedeploy = boto3.client('codedeploy')
+iam = boto3.client('iam')
+
+# Variables
+BUCKET_NAME = 'your-s3-bucket-for-artifacts'
+PIPELINE_NAME = 'YourDeploymentPipeline'
+APPLICATION_NAME = 'YourAppName'
+DEPLOYMENT_GROUP_NAME = 'YourDeploymentGroup'
+
+# Create S3 bucket for storing artifacts
+def create_s3_bucket(bucket_name):
+    response = s3.create_bucket(Bucket=bucket_name)
+    print(f"Bucket {bucket_name} created.")
+    return response
+
+# Create CloudFormation stack for Windows EC2
+def create_windows_instance_stack(stack_name, template_body):
+    response = cloudformation.create_stack(
+        StackName=stack_name,
+        TemplateBody=template_body,
+        Capabilities=['CAPABILITY_NAMED_IAM']
+    )
+    print(f"Windows EC2 stack {stack_name} created.")
+    return response
+
+# Create CloudFormation stack for Ubuntu EC2
+def create_ubuntu_instance_stack(stack_name, template_body):
+    response = cloudformation.create_stack(
+        StackName=stack_name,
+        TemplateBody=template_body,
+        Capabilities=['CAPABILITY_NAMED_IAM']
+    )
+    print(f"Ubuntu EC2 stack {stack_name} created.")
+    return response
+
+# Create CodeDeploy Application
+def create_codedeploy_application(application_name):
+    response = codedeploy.create_application(
+        applicationName=application_name,
+        computePlatform='Server'
+    )
+    print(f"CodeDeploy Application {application_name} created.")
+    return response
+
+# Create CodeDeploy Deployment Group
+def create_codedeploy_deployment_group(application_name, deployment_group_name):
+    response = codedeploy.create_deployment_group(
+        applicationName=application_name,
+        deploymentGroupName=deployment_group_name,
+        serviceRoleArn='arn:aws:iam::your-account-id:role/CodeDeployRole',
+        deploymentConfigName='CodeDeployDefault.AllAtOnce',
+        ec2TagFilters=[
+            {
+                'Key': 'Name',
+                'Value': 'Windows-EC2-Instance',
+                'Type': 'KEY_AND_VALUE'
+            }
+        ],
+        autoRollbackConfiguration={
+            'enabled': True,
+            'events': ['DEPLOYMENT_FAILURE', 'DEPLOYMENT_STOP_ON_ALARM']
+        }
+    )
+    print(f"CodeDeploy Deployment Group {deployment_group_name} created.")
+    return response
+
+# Create CodePipeline
+def create_codepipeline():
+    pipeline_definition = {
+        "pipeline": {
+            "name": PIPELINE_NAME,
+            "roleArn": "arn:aws:iam::your-account-id:role/CodePipelineRole",
+            "artifactStore": {
+                "type": "S3",
+                "location": BUCKET_NAME
+            },
+            "stages": [
+                {
+                    "name": "Source",
+                    "actions": [
+                        {
+                            "name": "SourceAction",
+                            "actionTypeId": {
+                                "category": "Source",
+                                "owner": "AWS",
+                                "provider": "S3",
+                                "version": "1"
+                            },
+                            "outputArtifacts": [
+                                {
+                                    "name": "SourceOutput"
+                                }
+                            ],
+                            "configuration": {
+                                "S3Bucket": BUCKET_NAME,
+                                "S3ObjectKey": "your-code.zip"
+                            },
+                            "runOrder": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "Deploy",
+                    "actions": [
+                        {
+                            "name": "DeployAction",
+                            "actionTypeId": {
+                                "category": "Deploy",
+                                "owner": "AWS",
+                                "provider": "CodeDeploy",
+                                "version": "1"
+                            },
+                            "inputArtifacts": [
+                                {
+                                    "name": "SourceOutput"
+                                }
+                            ],
+                            "configuration": {
+                                "ApplicationName": APPLICATION_NAME,
+                                "DeploymentGroupName": DEPLOYMENT_GROUP_NAME
+                            },
+                            "runOrder": 1
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    response = codepipeline.create_pipeline(pipeline=pipeline_definition)
+    print(f"CodePipeline {PIPELINE_NAME} created.")
+    return response
+
+# Main deployment flow
+def main():
+    # Create S3 bucket
+    create_s3_bucket(BUCKET_NAME)
+    
+    # Deploy CloudFormation stacks for Windows and Ubuntu instances
+    windows_template = open('windows-instance.yaml', 'r').read()
+    ubuntu_template = open('ubuntu-instance.yaml', 'r').read()
+    
+    create_windows_instance_stack('WindowsEC2Stack', windows_template)
+    create_ubuntu_instance_stack('UbuntuEC2Stack', ubuntu_template)
+    
+    # Create CodeDeploy Application and Deployment Group
+    create_codedeploy_application(APPLICATION_NAME)
+    create_codedeploy_deployment_group(APPLICATION_NAME, DEPLOYMENT_GROUP_NAME)
+    
+    # Create CodePipeline for CI/CD
+    create_codepipeline()
+
+# Run the deployment
+if __name__ == '__main__':
+    main()
