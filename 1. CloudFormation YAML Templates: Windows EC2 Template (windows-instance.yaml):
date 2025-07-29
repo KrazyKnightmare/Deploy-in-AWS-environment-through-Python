@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  WindowsInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro
+      ImageId: 'ami-xxxxxxxx'  # Replace with a valid Windows AMI ID for your region
+      KeyName: 'your-key-pair'  # Replace with your EC2 key pair
+      SecurityGroups: 
+        - 'your-security-group'  # Replace with your security group
+      Tags:
+        - Key: 'Name'
+          Value: 'Windows-EC2-Instance'
